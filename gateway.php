@@ -10,7 +10,7 @@ License URI: http://www.gnu.org/licenses/gpl-3.0.html
 Requires at least: 4.7
 Tested up to: 5.4
 WC requires at least: 3.0.0
-WC tested up to: 3.2.6
+WC tested up to: 4.2.0
 
 Copyright 2020  Gayra Ivan  (email : c0d3d101.inc@gmail.com)
 
@@ -44,7 +44,7 @@ if ( in_array( 'woocommerce/woocommerce.php', apply_filters( 'active_plugins', g
 	{
 		$schedules['oneminute'] = array(
 		'interval' => 60,
-		'display' => esc_html__( 'Once Every 1 minute' ),
+		'display' => esc_html__( 'Once Every Minute' ),
 		);
 		return $schedules;
 	}
@@ -124,15 +124,15 @@ if ( in_array( 'woocommerce/woocommerce.php', apply_filters( 'active_plugins', g
 	* @author 		Gayra Ivan
 	*/
 
-    add_action( 'plugins_loaded', 'init_woo_blink_gateway', 0 );
+    add_action( 'plugins_loaded', 'gibp_init_woo_blink_gateway', 0 );
 
-    function init_woo_blink_gateway()
+    function gibp_init_woo_blink_gateway()
     {
 		
 		if ( ! defined( 'ABSPATH' ) ) { exit; }
 
         /**
-		* WC_Blink_Gateway Class.
+		* GIBP_Blink_Gateway Class.
 		*/
 		class GIBP_Blink_Gateway extends WC_Payment_Gateway
         {
@@ -358,42 +358,26 @@ if ( in_array( 'woocommerce/woocommerce.php', apply_filters( 'active_plugins', g
 
                 $check = $wpdb->get_row( "SELECT order_id, reference_code FROM $table_name WHERE order_id = $order_id" );
                     
-				// Setup request to send json via POST
-				$url2 = $this->gatewayURL;
+		// Setup request to send json via POST
+		$url2 = $this->gatewayURL;
 				 
-				// Create a new cURL resource
-				$cURL = curl_init( $url2 );
-				 
-				$checkdata = array(
-				'username' => $this->username,
-				'password' => $this->password,
-				'api' => 'checktransactionstatus',
-				'reference_code' => $check->reference_code,
-				);
-				
-				$checkstatus = json_encode( $checkdata );
-				curl_setopt( $cURL, CURLOPT_POST, 1 );
-				 
-				// Attach encoded JSON string to the POST fields
-				curl_setopt( $cURL, CURLOPT_POSTFIELDS, $checkstatus );
-				 
-				// Set the content type to application/json
-				curl_setopt( $cURL, CURLOPT_HTTPHEADER, array( "Content-Type:application/json","Accept: application/json" ) );
-				 
-				// Return response instead of outputting
-				curl_setopt( $cURL, CURLOPT_RETURNTRANSFER, true );
-				 
-				//curl_setopt($ch, CURLOPT_TIMEOUT, 20);
-				 
-				$result2 = curl_exec( $cURL );
-				 
-				if ( !curl_errno( $cURL ) ) {
-					//check the response if it's still "PENDING" or "SUCCESSFUL" or "FAILED"
+		$checkdata = array(
+		'username' => $this->username,
+		'password' => $this->password,
+		'api' => 'checktransactionstatus',
+		'reference_code' => $check->reference_code,
+		);
+			
+		$checkstatus = json_encode( $checkdata );
+		    
+		$args = array( 'headers' => array( 'Content-Type' => 'application/json' ), 'body' => $checkstatus );
+		    
+		$result2 = wp_remote_post( esc_url_raw( $url2 ), $args );
+		    
+		$response_body = wp_remote_retrieve_body( $result2 );	
 					 
-					curl_close( $cURL );
-					$json2 = json_decode( $result2, true);
-					$status = $json2['status'];
-				}
+		$json2 = json_decode( $response_body, true);
+		$status = $json2['status'];
 
                 if ( $status === 'PENDING' ) {
 
@@ -418,7 +402,7 @@ if ( in_array( 'woocommerce/woocommerce.php', apply_filters( 'active_plugins', g
              * @author Gayra Ivan
              *
              **/
-            function gibp_process_payment( $order_id )
+            function process_payment( $order_id )
             {
                 global $woocommerce;
 
@@ -460,20 +444,15 @@ if ( in_array( 'woocommerce/woocommerce.php', apply_filters( 'active_plugins', g
 				//Encode the array into JSON.
 				$jsonDataEncoded = json_encode( $jsonData );
 				
-				$curl = curl_init();
-				curl_setopt_array( $curl, array(
-				CURLOPT_URL => $url,
-				CURLOPT_RETURNTRANSFER => true,
-				CURLOPT_POST => 1,
-				CURLOPT_POSTFIELDS => $jsonDataEncoded,
-				CURLOPT_HTTPHEADER => array( "Content-Type: application/json", "Accept: application/json" ),
-				));
-				
-				$network = curl_exec( $curl );
-				curl_close( $curl );
+						    
+		$args = array( 'headers' => array( 'Content-Type' => 'application/json' ), 'body' => $jsonDataEncoded );
+		    
+		$network = wp_remote_post( esc_url_raw( $url ), $args );
+		    
+		$network_body = wp_remote_retrieve_body( $network );
 				
 				//Attempt to decode the incoming RAW post data from JSON.
-				$networkDetails = json_decode( $network, true );
+				$networkDetails = json_decode( $network_body, true );
 				
 				//var_dump($networkDetails);
 				if( $networkDetails['status'] == 'ACTIVE' ){
@@ -491,19 +470,15 @@ if ( in_array( 'woocommerce/woocommerce.php', apply_filters( 'active_plugins', g
 					
 					//Encode the array into JSON.
 					$jsonData1 = json_encode( $data1 );
-					$curl = curl_init();
-					curl_setopt_array( $curl, array(
-					CURLOPT_URL => $url,
-					CURLOPT_RETURNTRANSFER => true,
-					CURLOPT_POST => 1,
-					CURLOPT_POSTFIELDS => $jsonData1,
-					CURLOPT_HTTPHEADER => array( "Content-Type: application/json", "Accept: application/json" ),
-					));
-					$response = curl_exec( $curl );
-					curl_close( $curl );
+		    
+		$args = array( 'headers' => array( 'Content-Type' => 'application/json' ), 'body' => $jsonData1 );
+		    
+		$response = wp_remote_post( esc_url_raw( $url ), $args );
+		    
+		$response_body = wp_remote_retrieve_body( $response );
 					
 					//Attempt to decode the incoming RAW post data from JSON.
-					$transactionDetails = json_decode( $response, true );
+					$transactionDetails = json_decode( $response_body, true );
 					
 					// if we have come from the gateway do some stuff
 					if ( isset( $transactionDetails['reference_code'] ) ) {
@@ -546,8 +521,6 @@ if ( in_array( 'woocommerce/woocommerce.php', apply_filters( 'active_plugins', g
 						// Setup request to send json via POST
 						$url2 = $this->gatewayURL;
 
-						// Create a new cURL resource
-						$cURL = curl_init( $url2 );
 						$checkdata = array(
 						'username' => $this->username,
 						'password' => $this->password,
@@ -556,24 +529,16 @@ if ( in_array( 'woocommerce/woocommerce.php', apply_filters( 'active_plugins', g
 						);
 
 						$checkstatus = json_encode( $checkdata );
-						curl_setopt( $cURL, CURLOPT_POST, 1 );
+		    
+		$args = array( 'headers' => array( 'Content-Type' => 'application/json' ), 'body' => $checkstatus );
+		    
+		$result2 = wp_remote_post( esc_url_raw( $url2 ), $args );
+		    
+		$response_body = wp_remote_retrieve_body( $result2 );
 
-						// Attach encoded JSON string to the POST fields
-						curl_setopt( $cURL, CURLOPT_POSTFIELDS, $checkstatus );
-
-						// Set the content type to application/json
-						curl_setopt( $cURL, CURLOPT_HTTPHEADER, array( 'Content-Type:application/json','Accept: application/json' ) );
-
-						// Return response instead of outputting
-						curl_setopt( $cURL, CURLOPT_RETURNTRANSFER, true );
-						$result2 = curl_exec( $cURL );
-
-						if ( !curl_errno( $cURL ) ) {
-							//check the response if it's still "PENDING" or "SUCCESSFUL" or "FAILED"
-							curl_close( $cURL );
-							$json2= json_decode( $result2, true );
+						//check the response if it's still "PENDING" or "SUCCESSFUL" or "FAILED"
+							$json2= json_decode( $response_body, true );
 							$status=$json2['status'];
-						}
 
                         switch ( $status ) {
                             case 'SUCCESSFUL':
@@ -622,18 +587,18 @@ if ( in_array( 'woocommerce/woocommerce.php', apply_filters( 'active_plugins', g
 				return $phone_args;
 			}
 
-        } // END WC_Blink_Gateway Class
+        } // END GIBP_Blink_Gateway Class
         
         $bchecks = new GIBP_Blink_Gateway();
 		add_action( 'blink_payment_checks', array( $bchecks, 'gibp_background_check_payment_status' ) );
 
-    } // END init_woo_blink_gateway()
+    } // END gibp_init_woo_blink_gateway()
 
     /**
      * @param String[] $methods
      * @return String[]
      */
-    function add_blink_gateway( $methods )
+    function gibp_add_blink_gateway( $methods )
     {
         $methods[] = 'GIBP_Blink_Gateway';
         return $methods;
@@ -641,5 +606,5 @@ if ( in_array( 'woocommerce/woocommerce.php', apply_filters( 'active_plugins', g
     
     	
 
-    add_filter( 'woocommerce_payment_gateways', 'add_blink_gateway' );
+    add_filter( 'woocommerce_payment_gateways', 'gibp_add_blink_gateway' );
 }
